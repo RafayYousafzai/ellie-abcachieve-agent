@@ -2,6 +2,20 @@
   // Prevent duplicate insertion
   if (document.getElementById('ellie-chat-container')) return;
 
+  function shouldHideWidgetOnCurrentPage() {
+    try {
+      const pathname = window.location.pathname.replace(/\/+$/, '').toLowerCase();
+      return pathname === '/caregiver-portal';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  if (shouldHideWidgetOnCurrentPage()) {
+    console.log('[Ellie Embed] Widget disabled on this page.');
+    return;
+  }
+
   console.log('[Ellie Embed] Script loaded.');
 
   const WIDGET_BASE_URL = 'https://ellie-abcachieve-agent.vercel.app';
