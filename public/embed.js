@@ -7,7 +7,7 @@
       const pathname = window.location.pathname
         .replace(/\/+$/, "")
         .toLowerCase();
-      return pathname === "/caregiver-portal";
+      return pathname === "/caregiver-resources";
     } catch (e) {
       return false;
     }
