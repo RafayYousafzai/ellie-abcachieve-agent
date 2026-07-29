@@ -73,68 +73,75 @@
     },
   };
 
-  // Helper to force styles on container and iframe
-  function applyStyles() {
-    const s = STATES[currentState];
-    if (!s) return;
+  let lastAppliedCss = "";
 
-    const activeContainer = document.getElementById("ellie-chat-container");
-    const activeIframe = document.getElementById("ellie-chat-iframe");
-    const isMobile = window.innerWidth < 640;
+  function getContainerCss() {
+    const s = STATES[currentState] || STATES.closed;
+    const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
 
     let width = s.width;
     if (currentState === "closed" && showBubbleState) {
       width = isMobile ? "100%" : "420px";
     }
 
-    // Apply strict styles to the container div
-    if (activeContainer) {
-      activeContainer.style.cssText = `
-        position: fixed !important;
-        z-index: 2147483647 !important;
-        border: none !important;
-        overflow: hidden !important;
-        background: transparent !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        box-shadow: none !important;
-        max-width: none !important;
-        max-height: none !important;
-        display: block !important;
-        box-sizing: border-box !important;
-        top: auto !important;
-        left: auto !important;
-        transform: none !important;
-        width: ${width} !important;
-        height: ${s.height} !important;
-        min-width: ${width} !important;
-        min-height: ${s.height} !important;
-        max-width: ${width} !important;
-        max-height: ${s.height} !important;
-        bottom: ${s.bottom} !important;
-        right: ${s.right} !important;
-        pointer-events: ${s.pointerEvents} !important;
-      `;
+    return `
+      position: fixed !important;
+      z-index: 2147483647 !important;
+      border: none !important;
+      overflow: hidden !important;
+      background: transparent !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      box-shadow: none !important;
+      display: block !important;
+      box-sizing: border-box !important;
+      top: auto !important;
+      left: auto !important;
+      transform: translateZ(0) !important;
+      will-change: width, height !important;
+      contain: layout paint !important;
+      width: ${width} !important;
+      height: ${s.height} !important;
+      min-width: ${width} !important;
+      min-height: ${s.height} !important;
+      max-width: ${width} !important;
+      max-height: ${s.height} !important;
+      bottom: ${s.bottom} !important;
+      right: ${s.right} !important;
+      pointer-events: ${s.pointerEvents} !important;
+    `.replace(/\s+/g, " ").trim();
+  }
+
+  const iframeCss = `
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 100% !important;
+    min-height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    border: none !important;
+    background: transparent !important;
+    pointer-events: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    display: block !important;
+    box-sizing: border-box !important;
+  `.replace(/\s+/g, " ").trim();
+
+  // Helper to force styles on container and iframe only when changed
+  function applyStyles(force) {
+    const activeContainer = document.getElementById("ellie-chat-container");
+    const activeIframe = document.getElementById("ellie-chat-iframe");
+    const targetCss = getContainerCss();
+
+    if (activeContainer && (force || lastAppliedCss !== targetCss)) {
+      activeContainer.style.cssText = targetCss;
+      lastAppliedCss = targetCss;
     }
 
-    // Apply strict styles to the iframe
-    if (activeIframe) {
-      activeIframe.style.cssText = `
-        width: 100% !important;
-        height: 100% !important;
-        min-width: 100% !important;
-        min-height: 100% !important;
-        max-width: 100% !important;
-        max-height: 100% !important;
-        border: none !important;
-        background: transparent !important;
-        pointer-events: auto !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        box-shadow: none !important;
-        display: block !important;
-        box-sizing: border-box !important;
-      `;
+    if (activeIframe && (force || activeIframe.style.cssText !== iframeCss)) {
+      activeIframe.style.cssText = iframeCss;
     }
   }
 
@@ -142,30 +149,43 @@
   const container = document.createElement("div");
   container.id = "ellie-chat-container";
 
+  // Pre-apply fixed overlay styles BEFORE appending to DOM
+  // so browser NEVER measures element in document layout flow (eliminates CLS)
+  container.style.cssText = getContainerCss();
+
   const iframe = document.createElement("iframe");
   iframe.id = "ellie-chat-iframe";
   iframe.src = `${baseUrl}/widget`;
   iframe.allow = "clipboard-read; clipboard-write; camera; microphone";
+  iframe.title = "Ellie Chat Assistant";
+  iframe.style.cssText = iframeCss;
 
-  const allowedOrigin = new URL(iframe.src).origin;
+  let allowedOrigin = baseUrl;
+  try {
+    allowedOrigin = new URL(iframe.src).origin;
+  } catch (e) {}
+
   console.log("[Ellie Embed] Iframe Src:", iframe.src);
   console.log("[Ellie Embed] Allowed Origin:", allowedOrigin);
 
   container.appendChild(iframe);
 
   // Set up MutationObserver to protect elements against style hijacking
+  let isUpdatingStyles = false;
   const observer = new MutationObserver(function (mutations) {
-    mutations.forEach(function (mutation) {
+    if (isUpdatingStyles) return;
+    for (let i = 0; i < mutations.length; i++) {
+      const mutation = mutations[i];
       if (
         mutation.type === "attributes" &&
-        (mutation.attributeName === "style" ||
-          mutation.attributeName === "class")
+        (mutation.attributeName === "style" || mutation.attributeName === "class")
       ) {
-        observer.disconnect();
-        applyStyles();
-        startObserving();
+        isUpdatingStyles = true;
+        applyStyles(true);
+        isUpdatingStyles = false;
+        break;
       }
-    });
+    }
   });
 
   function startObserving() {
@@ -188,23 +208,14 @@
   // Safe injection method that guarantees document.body is available
   function injectWidget() {
     if (document.getElementById("ellie-chat-container")) return;
-    document.body.appendChild(container);
-    applyStyles();
-    startObserving();
-
-    // Hard enforcer loop: verifies parenting, overrides hijacked styles, handles clones
-    setInterval(function () {
-      const activeContainer = document.getElementById("ellie-chat-container");
-      if (activeContainer && activeContainer.parentElement !== document.body) {
-        console.log(
-          "%c[Ellie Chat]%c Container was reparented. Re-appending to body.",
-          "color: #2563eb; font-weight: bold;",
-          "color: inherit;",
-        );
-        document.body.appendChild(activeContainer);
-      }
-      applyStyles();
-    }, 500);
+    
+    // Always append directly to body or root element
+    const parentNode = document.body || document.documentElement;
+    if (parentNode) {
+      parentNode.appendChild(container);
+      applyStyles(true);
+      startObserving();
+    }
   }
 
   if (document.readyState === "loading") {
@@ -213,21 +224,16 @@
     injectWidget();
   }
 
+  // Passive window resize listener to update styles on layout change
+  window.addEventListener("resize", function () {
+    applyStyles();
+  }, { passive: true });
+
   // Listen to messages from the widget
   window.addEventListener(
     "message",
     function (event) {
       if (!event.data || event.data.type !== "ellie-chat-widget") return;
-
-      console.log(
-        "%c[Ellie Chat]%c Received message from origin: %c%s%c with data:",
-        "color: #2563eb; font-weight: bold;",
-        "color: inherit;",
-        "color: #059669; font-weight: bold;",
-        event.origin,
-        "color: inherit;",
-        event.data,
-      );
 
       const isAllowedOrigin =
         event.origin === allowedOrigin ||
@@ -244,7 +250,7 @@
           allowedOrigin,
           "color: inherit;",
           "color: #dc2626; font-weight: bold;",
-          event.origin,
+          event.origin
         );
         return;
       }
@@ -254,25 +260,14 @@
       showBubbleState = !!event.data.showBubble;
 
       if (!isOpen) {
-        console.log(
-          "%c[Ellie Chat]%c Transitioning to closed state. showBubble: %s",
-          "color: #2563eb; font-weight: bold;",
-          "color: inherit;",
-          showBubbleState,
-        );
         currentState = "closed";
       } else {
-        console.log(
-          "%c[Ellie Chat]%c Transitioning to open state. Mobile: %s",
-          "color: #2563eb; font-weight: bold;",
-          "color: inherit;",
-          isMobile,
-        );
         currentState = isMobile ? "open_mobile" : "open_desktop";
       }
 
       applyStyles();
     },
-    true,
-  ); // Listen in the capture phase to prevent other scripts from blocking it
+    true
+  );
 })();
+
