@@ -49,11 +49,6 @@ export default function ChatWidget() {
       setIsEmbedded(window.self !== window.top);
       setBubbleText("How can I help? 👋");
       setShowBubble(true);
-      introTimerRef.current = window.setTimeout(() => {
-        hasAutoOpenedRef.current = true;
-        setIsOpen(true);
-        setShowBubble(false);
-      }, 1800);
     }
   }, []);
 
@@ -75,10 +70,6 @@ export default function ChatWidget() {
       }
 
       setShowBubble(false);
-      return;
-    }
-
-    if (!hasAutoOpenedRef.current) {
       return;
     }
 

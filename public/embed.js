@@ -51,7 +51,7 @@
 
   const STATES = {
     closed: {
-      width: "90px",
+      width: "420px",
       height: "90px",
       bottom: "16px",
       right: "16px",
@@ -80,8 +80,9 @@
     const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
 
     let width = s.width;
-    if (currentState === "closed" && showBubbleState) {
-      width = isMobile ? "100%" : "420px";
+    let height = s.height;
+    if (currentState === "closed" && isMobile) {
+      width = "100%";
     }
 
     return `
@@ -101,11 +102,11 @@
       will-change: width, height !important;
       contain: layout paint !important;
       width: ${width} !important;
-      height: ${s.height} !important;
+      height: ${height} !important;
       min-width: ${width} !important;
-      min-height: ${s.height} !important;
+      min-height: ${height} !important;
       max-width: ${width} !important;
-      max-height: ${s.height} !important;
+      max-height: ${height} !important;
       bottom: ${s.bottom} !important;
       right: ${s.right} !important;
       pointer-events: ${s.pointerEvents} !important;
